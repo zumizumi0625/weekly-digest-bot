@@ -1,0 +1,28 @@
+{
+  "name": "weekly-digest-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that generates weekly activity summaries from Discord channels and Google Drive",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "register": "tsx scripts/register-commands.ts"
+  },
+  "keywords": ["discord", "bot", "weekly-digest", "gemini", "ai"],
+  "license": "MIT",
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "better-sqlite3": "^11.0.0",
+    "discord.js": "^14.16.0",
+    "googleapis": "^144.0.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
