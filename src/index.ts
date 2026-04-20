@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Events } from 'discord.js';
 import { Config } from './config.js';
-import { getDb } from './db.js';
+import { getDb, isChannelWatched } from './db.js';
 import { handleMessageCreate } from './collector.js';
 import { handleDigestCommand } from './commands/digest.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
@@ -16,7 +16,7 @@ const client = new Client({
 
 // --- イベントハンドラ ---
 
-client.once(Events.ClientReady, (readyClient) => {
+client.once(Events.ClientReady, async (readyClient) => {
   console.log(`[Bot] ${readyClient.user.tag} としてログインしました`);
   console.log(`[Bot] ${readyClient.guilds.cache.size} サーバーに接続中`);
 
@@ -33,6 +33,31 @@ client.once(Events.ClientReady, (readyClient) => {
     pollDriveChanges().catch(err => console.error('[Drive] 初回ポーリングエラー:', err));
   } else {
     console.log('[Drive] Google Drive 連携は無効です（GOOGLE_CREDENTIALS_PATH が未設定）');
+  }
+
+  // 既存のアクティブスレッドに参加（Bot オフライン中に作成されたスレッド対応）
+  for (const guild of readyClient.guilds.cache.values()) {
+    const activeThreads = await guild.channels.fetchActiveThreads();
+    for (const thread of activeThreads.threads.values()) {
+      if (thread.parentId && isChannelWatched(guild.id, thread.parentId)) {
+        if (!thread.joined) {
+          await thread.join();
+          console.log(`[Thread] 既存スレッドに参加: #${thread.name} (${thread.id})`);
+        }
+      }
+    }
+  }
+});
+
+// スレッド作成時に自動参加
+client.on(Events.ThreadCreate, async (thread) => {
+  if (!thread.parentId || !thread.guildId) return;
+
+  if (isChannelWatched(thread.guildId, thread.parentId)) {
+    if (!thread.joined) {
+      await thread.join();
+      console.log(`[Thread] 新規スレッドに参加: #${thread.name} (${thread.id})`);
+    }
   }
 });
 

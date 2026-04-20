@@ -1,4 +1,4 @@
-import { Message } from 'discord.js';
+import { Message, ThreadChannel } from 'discord.js';
 import { insertMessage, isChannelWatched } from './db.js';
 
 /**
@@ -19,7 +19,12 @@ export function handleMessageCreate(message: Message): void {
   const channelId = message.channel.id;
 
   // 監視対象チャンネルかチェック
-  if (!isChannelWatched(guildId, channelId)) return;
+  // スレッド内メッセージの場合は親チャンネルも確認する
+  const isThread = message.channel.isThread();
+  const parentId = isThread ? (message.channel as ThreadChannel).parentId : null;
+  const watched = isChannelWatched(guildId, channelId)
+    || (parentId != null && isChannelWatched(guildId, parentId));
+  if (!watched) return;
 
   const channelName = 'name' in message.channel ? (message.channel.name ?? '不明') : '不明';
 
