@@ -15,6 +15,7 @@ import {
 import { executeDigest, reloadScheduler } from '../scheduler.js';
 import { isDriveConfigured } from '../drive.js';
 import { dayToJapanese, isValidDay, isValidTime } from '../utils/format.js';
+import { backfillThreadMessages } from '../thread-backfill.js';
 
 export const digestCommand = new SlashCommandBuilder()
   .setName('digest')
@@ -97,6 +98,18 @@ export const digestCommand = new SlashCommandBuilder()
       ),
   )
   .addSubcommand(sub =>
+    sub
+      .setName('backfill-threads')
+      .setDescription('過去のスレッドメッセージを取り込む')
+      .addIntegerOption(opt =>
+        opt
+          .setName('days')
+          .setDescription('何日分を対象にするか（デフォルト: 30）')
+          .setMinValue(1)
+          .setMaxValue(365),
+      ),
+  )
+  .addSubcommand(sub =>
     sub.setName('drive').setDescription('Google Drive の接続状態を表示する'),
   )
   .addSubcommand(sub =>
@@ -135,6 +148,9 @@ export async function handleDigestCommand(interaction: ChatInputCommandInteracti
       break;
     case 'generate':
       await handleGenerate(interaction, guildId);
+      break;
+    case 'backfill-threads':
+      await handleBackfillThreads(interaction, guildId);
       break;
     case 'drive':
       await handleDriveStatus(interaction);
@@ -186,11 +202,39 @@ async function handleGenerate(interaction: ChatInputCommandInteraction, guildId:
   await interaction.deferReply();
 
   try {
+    // ダイジェスト生成前にスレッドメッセージを取り込み（漏れ防止）
+    const sinceDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const bf = await backfillThreadMessages(interaction.client, guildId, sinceDate);
+    if (bf.messagesInserted > 0) {
+      console.log(`[Thread Backfill] ${bf.threadsScanned} スレッドから ${bf.messagesInserted} 件取り込み`);
+    }
+
     await executeDigest(interaction.client, guildId, interaction.channelId, days);
     await interaction.editReply(`過去 ${days} 日分のダイジェストを生成しました。`);
   } catch (err) {
     console.error('[Digest] ダイジェスト生成エラー:', err);
     await interaction.editReply('ダイジェストの生成中にエラーが発生しました。ログを確認してください。');
+  }
+}
+
+async function handleBackfillThreads(interaction: ChatInputCommandInteraction, guildId: string): Promise<void> {
+  const days = interaction.options.getInteger('days') ?? 30;
+
+  await interaction.deferReply();
+
+  try {
+    const sinceDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    await interaction.editReply(`⏳ 過去 ${days} 日分のスレッドメッセージを取り込み中... (数分かかる場合あり)`);
+
+    const result = await backfillThreadMessages(interaction.client, guildId, sinceDate);
+    await interaction.editReply(
+      `✅ スレッド Backfill 完了\n` +
+      `- スレッド走査: ${result.threadsScanned}\n` +
+      `- メッセージ取り込み: ${result.messagesInserted}`,
+    );
+  } catch (err) {
+    console.error('[Thread Backfill] エラー:', err);
+    await interaction.editReply('❌ スレッド Backfill 失敗。ログを確認してください。');
   }
 }
 
